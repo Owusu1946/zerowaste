@@ -64,3 +64,40 @@ export const Transactions = pgTable("transactions", {
   description: text("description").notNull(),
   date: timestamp("date").defaultNow().notNull(),
 });
+
+// Challenges table
+export const Challenges = pgTable("challenges", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  challengeType: varchar("challenge_type", { length: 50 }).notNull(), // 'individual', 'team', 'global'
+  goalType: varchar("goal_type", { length: 50 }).notNull(), // 'waste_collected', 'reports_count', 'collections_count'
+  goalAmount: integer("goal_amount").notNull(),
+  rewardPoints: integer("reward_points").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Challenge Participants table
+export const ChallengeParticipants = pgTable("challenge_participants", {
+  id: serial("id").primaryKey(),
+  challengeId: integer("challenge_id").references(() => Challenges.id).notNull(),
+  userId: integer("user_id").references(() => Users.id).notNull(),
+  progress: integer("progress").notNull().default(0),
+  completed: boolean("completed").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+// Teams table (for future team challenges)
+export const Teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  captainId: integer("captain_id").references(() => Users.id).notNull(),
+  memberCount: integer("member_count").notNull().default(1),
+  totalPoints: integer("total_points").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

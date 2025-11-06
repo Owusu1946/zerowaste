@@ -12,34 +12,9 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Web3Auth } from "@web3auth/modal"
-import { CHAIN_NAMESPACES, IProvider, WEB3AUTH_NETWORK } from "@web3auth/base"
-import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { createUser, getUnreadNotifications, markNotificationAsRead, getUserByEmail, getUserBalance } from "@/utils/db/actions"
-
-const clientId = "BJKdDFkNtkWX87XqkuWrDu4rbkSvWyQZ5lswS0ucINxxcN0inRVW8zzKAywPPzgiOHP7_3PcfFwfpvcQvSdaLRs";
-
-const chainConfig = {
-  chainNamespace: CHAIN_NAMESPACES.EIP155,
-  chainId: "0xaa36a7",
-  rpcTarget: "https://rpc.ankr.com/eth_sepolia",
-  displayName: "Ethereum Sepolia Testnet",
-  blockExplorerUrl: "https://sepolia.etherscan.io",
-  ticker: "ETH",
-  tickerName: "Ethereum",
-  logo: "https://cryptologos.cc/logos/ethereum-eth-logo.png",
-};
-
-const privateKeyProvider = new EthereumPrivateKeyProvider({
-  config: { chainConfig },
-});
-
-const web3auth = new Web3Auth({
-  clientId,
-  web3AuthNetwork: WEB3AUTH_NETWORK.TESTNET, // Changed from SAPPHIRE_MAINNET to TESTNET
-  privateKeyProvider,
-});
+import { useRouter } from 'next/navigation'
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -47,7 +22,6 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
-  const [provider, setProvider] = useState<IProvider | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<any>(null);
@@ -55,37 +29,32 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [balance, setBalance] = useState(0)
+  const router = useRouter()
 
-  console.log('user info', userInfo);
+  console.log('[Auth] user info state updated:', userInfo);
   
   useEffect(() => {
-    const init = async () => {
+    const bootstrapUser = async () => {
       try {
-        await web3auth.initModal();
-        setProvider(web3auth.provider);
+        const email = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+        const name = typeof window !== 'undefined' ? localStorage.getItem('userName') : null;
 
-        if (web3auth.connected) {
+        if (email) {
+          console.log('[Auth] Restoring session for', email);
           setLoggedIn(true);
-          const user = await web3auth.getUserInfo();
-          setUserInfo(user);
-          if (user.email) {
-            localStorage.setItem('userEmail', user.email);
-            try {
-              await createUser(user.email, user.name || 'Anonymous User');
-            } catch (error) {
-              console.error("Error creating user:", error);
-              // Handle the error appropriately, maybe show a message to the user
-            }
+          setUserInfo({ email, name });
+          try {
+            await createUser(email, name || 'Anonymous User');
+          } catch (error) {
+            console.error('[Auth] Error ensuring user exists:', error);
           }
         }
-      } catch (error) {
-        console.error("Error initializing Web3Auth:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    init();
+    bootstrapUser();
   }, []);
 
   useEffect(() => {
@@ -132,60 +101,36 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
     };
   }, [userInfo]);
 
-  const login = async () => {
-    if (!web3auth) {
-      console.log("web3auth not initialized yet");
-      return;
-    }
-    try {
-      const web3authProvider = await web3auth.connect();
-      setProvider(web3authProvider);
-      setLoggedIn(true);
-      const user = await web3auth.getUserInfo();
-      setUserInfo(user);
-      if (user.email) {
-        localStorage.setItem('userEmail', user.email);
-        try {
-          await createUser(user.email, user.name || 'Anonymous User');
-        } catch (error) {
-          console.error("Error creating user:", error);
-          // Handle the error appropriately, maybe show a message to the user
-        }
-      }
-    } catch (error) {
-      console.error("Error during login:", error);
-    }
+  const handleLoginClick = () => {
+    router.push('/auth');
   };
 
   const logout = async () => {
-    if (!web3auth) {
-      console.log("web3auth not initialized yet");
-      return;
-    }
     try {
-      await web3auth.logout();
-      setProvider(null);
+      console.log('[Auth] Logging out');
       setLoggedIn(false);
       setUserInfo(null);
       localStorage.removeItem('userEmail');
+      localStorage.removeItem('userName');
+      
+      // Redirect to auth page
+      router.push('/auth');
     } catch (error) {
-      console.error("Error during logout:", error);
+      console.error('[Auth] Error during logout', error);
     }
   };
 
   const getUserInfo = async () => {
-    if (web3auth.connected) {
-      const user = await web3auth.getUserInfo();
-      setUserInfo(user);
-      if (user.email) {
-        localStorage.setItem('userEmail', user.email);
-        try {
-          await createUser(user.email, user.name || 'Anonymous User');
-        } catch (error) {
-          console.error("Error creating user:", error);
-          // Handle the error appropriately, maybe show a message to the user
-        }
+    if (!userInfo?.email) return;
+
+    try {
+      const user = await getUserByEmail(userInfo.email);
+      if (user) {
+        setUserInfo({ email: user.email, name: user.name });
+        localStorage.setItem('userName', user.name || 'Anonymous User');
       }
+    } catch (error) {
+      console.error('[Auth] Error refreshing user info', error);
     }
   };
 
@@ -269,7 +214,7 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
             </span>
           </div>
           {!loggedIn ? (
-            <Button onClick={login} className="bg-green-600 hover:bg-green-700 text-white text-sm md:text-base">
+            <Button onClick={handleLoginClick} className="bg-green-600 hover:bg-green-700 text-white text-sm md:text-base">
               Login
               <LogIn className="ml-1 md:ml-2 h-4 w-4 md:h-5 md:w-5" />
             </Button>

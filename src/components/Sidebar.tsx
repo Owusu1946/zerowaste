@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { usePathname } from 'next/navigation'
 import { Button } from "@/components/ui/button"
-import { MapPin, Trash, Coins, Medal, Settings, Home, Car } from "lucide-react"
+import { MapPin, Trash, Coins, Medal, Settings, Home, Trophy, Award, Scan } from "lucide-react"
 
 const sidebarItems = [
   { href: "/", icon: Home, label: "Home" },
@@ -9,6 +9,9 @@ const sidebarItems = [
   { href: "/collect", icon: Trash, label: "Collect Waste" },
   { href: "/rewards", icon: Coins, label: "Rewards" },
   { href: "/leaderboard", icon: Medal, label: "Leaderboard" },
+  { href: "/challenges", icon: Trophy, label: "Challenges", badge: "New" },
+  // { href: "/badges", icon: Award, label: "NFT Badges", badge: "New" },
+  // { href: "/ar-scanner", icon: Scan, label: "AR Scanner", badge: "Beta" },
 ]
 
 interface SidebarProps {
@@ -26,7 +29,7 @@ export default function Sidebar({ open }: SidebarProps) {
             <Link key={item.href} href={item.href} passHref>
               <Button 
                 variant={pathname === item.href ? "secondary" : "ghost"}
-                className={`w-full justify-start py-3 ${
+                className={`w-full justify-start py-3 relative ${
                   pathname === item.href 
                     ? "bg-green-100 text-green-800" 
                     : "text-gray-600 hover:bg-gray-100"
@@ -34,6 +37,13 @@ export default function Sidebar({ open }: SidebarProps) {
               >
                 <item.icon className="mr-3 h-5 w-5" />
                 <span className="text-base">{item.label}</span>
+                {item.badge && (
+                  <span className={`ml-auto text-xs px-2 py-1 rounded-full font-semibold ${
+                    item.badge === 'New' ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
               </Button>
             </Link>
           ))}

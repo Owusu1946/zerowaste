@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Coins, ArrowUpRight, ArrowDownRight, Gift, AlertCircle, Loader } from 'lucide-react'
+import { Coins, ArrowUpRight, ArrowDownRight, Gift, AlertCircle, Loader, Wallet, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getUserByEmail, getRewardTransactions, getAvailableRewards, redeemReward, createTransaction } from '@/utils/db/actions'
 import { toast } from 'react-hot-toast'
+import { sendTestnetTokens, getTransactionUrl, isValidWalletAddress, calculateEthAmount } from '@/lib/blockchain'
 
 type Transaction = {
   id: number
@@ -27,6 +28,9 @@ export default function RewardsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
+  const [walletAddress, setWalletAddress] = useState('')
+  const [redeeming, setRedeeming] = useState(false)
+  const [lastTxHash, setLastTxHash] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchUserDataAndRewards = async () => {
@@ -122,6 +126,80 @@ export default function RewardsPage() {
     }
   }
 
+  const handleBlockchainRedemption = async () => {
+    if (!user) {
+      toast.error('Please log in to redeem tokens.');
+      return;
+    }
+
+    if (!walletAddress.trim()) {
+      toast.error('Please enter your wallet address');
+      return;
+    }
+
+    if (!isValidWalletAddress(walletAddress)) {
+      toast.error('Invalid wallet address format');
+      return;
+    }
+
+    if (balance <= 0) {
+      toast.error('Insufficient points to redeem');
+      return;
+    }
+
+    setRedeeming(true);
+    const toastId = toast.loading('Sending tokens to your wallet...');
+
+    try {
+      // Send tokens via blockchain
+      const result = await sendTestnetTokens(walletAddress, balance);
+
+      if (result.success && result.txHash) {
+        // Update database - redeem points
+        await redeemReward(user.id, 0);
+        
+        // Create transaction record
+        await createTransaction(
+          user.id,
+          'redeemed',
+          balance,
+          `Redeemed ${balance} points for ${result.amountSent} (Tx: ${result.txHash.substring(0, 10)}...)`
+        );
+
+        // Store transaction hash
+        setLastTxHash(result.txHash);
+
+        // Refresh user data
+        await refreshUserData();
+
+        toast.success(
+          <div>
+            <p>Successfully sent {result.amountSent} to your wallet!</p>
+            <a 
+              href={getTransactionUrl(result.txHash)} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-500 underline text-sm"
+            >
+              View on Etherscan
+            </a>
+          </div>,
+          { id: toastId, duration: 10000 }
+        );
+
+        // Clear wallet address
+        setWalletAddress('');
+      } else {
+        toast.error(result.error || 'Failed to send tokens', { id: toastId });
+      }
+    } catch (error: any) {
+      console.error('Blockchain redemption error:', error);
+      toast.error('Transaction failed. Please try again.', { id: toastId });
+    } finally {
+      setRedeeming(false);
+    }
+  }
+
   const refreshUserData = async () => {
     if (user) {
       const fetchedUser = await getUserByEmail(user.email);
@@ -158,8 +236,60 @@ export default function RewardsPage() {
             <div>
               <span className="text-4xl font-bold text-green-500">{balance}</span>
               <p className="text-sm text-gray-500">Available Points</p>
+              {balance > 0 && (
+                <p className="text-xs text-gray-400 mt-1">≈ {calculateEthAmount(balance)} SepoliaETH</p>
+              )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Blockchain Redemption Section */}
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl shadow-lg mb-8 border border-purple-200">
+        <div className="flex items-center mb-4">
+          <Wallet className="w-6 h-6 mr-2 text-purple-600" />
+          <h2 className="text-xl font-semibold text-gray-800">Redeem to Blockchain</h2>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Convert your points to Sepolia testnet ETH tokens. Enter your wallet address below.
+        </p>
+        <div className="space-y-3">
+          <input
+            type="text"
+            placeholder="Your Ethereum wallet address (0x...)" 
+            value={walletAddress}
+            onChange={(e) => setWalletAddress(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            disabled={redeeming || balance === 0}
+          />
+          <Button
+            onClick={handleBlockchainRedemption}
+            disabled={redeeming || balance === 0 || !walletAddress.trim()}
+            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold"
+          >
+            {redeeming ? (
+              <>
+                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                Processing Transaction...
+              </>
+            ) : (
+              <>
+                <Wallet className="w-4 h-4 mr-2" />
+                Redeem {balance} Points ({calculateEthAmount(balance)} SepoliaETH)
+              </>
+            )}
+          </Button>
+          {lastTxHash && (
+            <a
+              href={getTransactionUrl(lastTxHash)}
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center justify-center text-sm text-purple-600 hover:text-purple-700"
+            >
+              <ExternalLink className="w-4 h-4 mr-1" />
+              View Last Transaction
+            </a>
+          )}
         </div>
       </div>
 

@@ -12,6 +12,23 @@ import { toast } from 'react-hot-toast'
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
+const extractJsonPayload = (rawText: string) => {
+  const withoutFences = rawText
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  const jsonStart = withoutFences.indexOf('{');
+  const jsonEnd = withoutFences.lastIndexOf('}');
+
+  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) {
+    throw new Error('No JSON object found in model response');
+  }
+
+  const candidate = withoutFences.slice(jsonStart, jsonEnd + 1);
+  return JSON.parse(candidate);
+};
+
 const libraries: Libraries = ['places'];
 
 export default function ReportPage() {
@@ -59,10 +76,16 @@ export default function ReportPage() {
       const places = searchBox.getPlaces();
       if (places && places.length > 0) {
         const place = places[0];
+        const address = place.formatted_address || '';
         setNewReport(prev => ({
           ...prev,
-          location: place.formatted_address || '',
+          location: address,
         }));
+        // Update the input field directly
+        const input = document.getElementById('location') as HTMLInputElement;
+        if (input) {
+          input.value = address;
+        }
       }
     }
   };
@@ -100,7 +123,7 @@ export default function ReportPage() {
     
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey!);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
       const base64Data = await readFileAsBase64(file);
 
@@ -128,23 +151,23 @@ export default function ReportPage() {
       const result = await model.generateContent([prompt, ...imageParts]);
       const response = await result.response;
       const text = response.text();
-      
+
       try {
-        const parsedResult = JSON.parse(text);
+        const parsedResult = extractJsonPayload(text);
         if (parsedResult.wasteType && parsedResult.quantity && parsedResult.confidence) {
           setVerificationResult(parsedResult);
           setVerificationStatus('success');
-          setNewReport({
-            ...newReport,
+          setNewReport((prev) => ({
+            ...prev,
             type: parsedResult.wasteType,
-            amount: parsedResult.quantity
-          });
+            amount: parsedResult.quantity,
+          }));
         } else {
           console.error('Invalid verification result:', parsedResult);
           setVerificationStatus('failure');
         }
       } catch (error) {
-        console.error('Failed to parse JSON response:', text);
+        console.error('Failed to parse JSON response:', text, error);
         setVerificationStatus('failure');
       }
     } catch (error) {
@@ -186,6 +209,11 @@ export default function ReportPage() {
       setVerificationStatus('idle');
       setVerificationResult(null);
       
+      // Clear the location input field
+      const input = document.getElementById('location') as HTMLInputElement;
+      if (input) {
+        input.value = '';
+      }
 
       toast.success(`Report submitted successfully! You've earned points for reporting waste.`);
     } catch (error) {
@@ -294,11 +322,10 @@ export default function ReportPage() {
                   type="text"
                   id="location"
                   name="location"
-                  value={newReport.location}
-                  onChange={handleInputChange}
+                  defaultValue={newReport.location}
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300"
-                  placeholder="Enter waste location"
+                  placeholder="Search for a location..."
                 />
               </StandaloneSearchBox>
             ) : (

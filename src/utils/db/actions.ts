@@ -1,6 +1,6 @@
 import { db } from './dbConfig';
-import { Users, Reports, Rewards, CollectedWastes, Notifications, Transactions } from './schema';
-import { eq, sql, and, desc, ne } from 'drizzle-orm';
+import { Users, Reports, Rewards, CollectedWastes, Notifications, Transactions, Challenges, ChallengeParticipants } from './schema';
+import { eq, sql, and, desc, ne, gte, lte } from 'drizzle-orm';
 
 export async function createUser(email: string, name: string) {
   try {
@@ -59,6 +59,9 @@ export async function createReport(
       `You've earned ${pointsEarned} points for reporting waste!`,
       'reward'
     );
+
+    // Update challenge progress
+    await checkAndUpdateChallenges(userId, 'report');
 
     return report;
   } catch (error) {
@@ -243,7 +246,7 @@ export async function getWasteCollectionTasks(limit: number = 20) {
   }
 }
 
-export async function saveReward(userId: number, amount: number) {
+export async function saveReward(userId: number, amount: number, wasteAmount?: number) {
   try {
     const [reward] = await db
       .insert(Rewards)
@@ -260,6 +263,9 @@ export async function saveReward(userId: number, amount: number) {
     
     // Create a transaction for this reward
     await createTransaction(userId, 'earned_collect', amount, 'Points earned for collecting waste');
+
+    // Update challenge progress
+    await checkAndUpdateChallenges(userId, 'collect', wasteAmount);
 
     return reward;
   } catch (error) {
@@ -477,3 +483,252 @@ export async function getUserBalance(userId: number): Promise<number> {
   return Math.max(balance, 0); // Ensure balance is never negative
 }
 
+// ========== CHALLENGE ACTIONS ==========
+
+export async function createChallenge(data: {
+  title: string;
+  description: string;
+  challengeType: string;
+  goalType: string;
+  goalAmount: number;
+  rewardPoints: number;
+  startDate: Date;
+  endDate: Date;
+}) {
+  try {
+    const [challenge] = await db.insert(Challenges).values(data).returning().execute();
+    return challenge;
+  } catch (error) {
+    console.error("Error creating challenge:", error);
+    return null;
+  }
+}
+
+export async function getActiveChallenges() {
+  try {
+    const now = new Date();
+    const challenges = await db
+      .select()
+      .from(Challenges)
+      .where(
+        and(
+          eq(Challenges.isActive, true),
+          lte(Challenges.startDate, now),
+          gte(Challenges.endDate, now)
+        )
+      )
+      .execute();
+    return challenges;
+  } catch (error) {
+    console.error("Error fetching active challenges:", error);
+    return [];
+  }
+}
+
+export async function getAllChallenges() {
+  try {
+    const challenges = await db
+      .select()
+      .from(Challenges)
+      .orderBy(desc(Challenges.createdAt))
+      .execute();
+    return challenges;
+  } catch (error) {
+    console.error("Error fetching all challenges:", error);
+    return [];
+  }
+}
+
+export async function getChallengeById(challengeId: number) {
+  try {
+    const [challenge] = await db
+      .select()
+      .from(Challenges)
+      .where(eq(Challenges.id, challengeId))
+      .execute();
+    return challenge;
+  } catch (error) {
+    console.error("Error fetching challenge:", error);
+    return null;
+  }
+}
+
+export async function joinChallenge(userId: number, challengeId: number) {
+  try {
+    // Check if already joined
+    const existing = await db
+      .select()
+      .from(ChallengeParticipants)
+      .where(
+        and(
+          eq(ChallengeParticipants.userId, userId),
+          eq(ChallengeParticipants.challengeId, challengeId)
+        )
+      )
+      .execute();
+
+    if (existing.length > 0) {
+      return { success: false, message: 'Already joined this challenge' };
+    }
+
+    const [participant] = await db
+      .insert(ChallengeParticipants)
+      .values({ userId, challengeId })
+      .returning()
+      .execute();
+
+    return { success: true, participant };
+  } catch (error) {
+    console.error("Error joining challenge:", error);
+    return { success: false, message: 'Failed to join challenge' };
+  }
+}
+
+export async function getUserChallenges(userId: number) {
+  try {
+    const participants = await db
+      .select()
+      .from(ChallengeParticipants)
+      .where(eq(ChallengeParticipants.userId, userId))
+      .execute();
+    
+    if (participants.length === 0) return [];
+
+    const challengeIds = participants.map(p => p.challengeId);
+    const challenges = await db
+      .select()
+      .from(Challenges)
+      .where(sql`${Challenges.id} IN (${sql.join(challengeIds.map(id => sql`${id}`), sql`, `)})`)
+      .execute();
+
+    // Combine challenge data with participant data
+    return challenges.map(challenge => {
+      const participant = participants.find(p => p.challengeId === challenge.id);
+      return {
+        ...challenge,
+        progress: participant?.progress || 0,
+        completed: participant?.completed || false,
+        joinedAt: participant?.joinedAt,
+        completedAt: participant?.completedAt,
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching user challenges:", error);
+    return [];
+  }
+}
+
+export async function updateChallengeProgress(
+  userId: number,
+  challengeId: number,
+  progressIncrement: number
+) {
+  try {
+    // Get current progress
+    const [participant] = await db
+      .select()
+      .from(ChallengeParticipants)
+      .where(
+        and(
+          eq(ChallengeParticipants.userId, userId),
+          eq(ChallengeParticipants.challengeId, challengeId)
+        )
+      )
+      .execute();
+
+    if (!participant) {
+      // User hasn't joined this challenge, auto-join them
+      await joinChallenge(userId, challengeId);
+      return await updateChallengeProgress(userId, challengeId, progressIncrement);
+    }
+
+    if (participant.completed) {
+      return { success: true, message: 'Challenge already completed' };
+    }
+
+    const newProgress = participant.progress + progressIncrement;
+
+    // Get challenge details
+    const challenge = await getChallengeById(challengeId);
+    if (!challenge) {
+      return { success: false, message: 'Challenge not found' };
+    }
+
+    const isCompleted = newProgress >= challenge.goalAmount;
+
+    // Update progress
+    await db
+      .update(ChallengeParticipants)
+      .set({
+        progress: newProgress,
+        completed: isCompleted,
+        completedAt: isCompleted ? new Date() : null,
+      })
+      .where(
+        and(
+          eq(ChallengeParticipants.userId, userId),
+          eq(ChallengeParticipants.challengeId, challengeId)
+        )
+      )
+      .execute();
+
+    // Award points if completed
+    if (isCompleted) {
+      await createTransaction(
+        userId,
+        'earned_collect',
+        challenge.rewardPoints,
+        `Completed challenge: ${challenge.title}`
+      );
+
+      await createNotification(
+        userId,
+        `Congratulations! You completed "${challenge.title}" and earned ${challenge.rewardPoints} points! 🎉`,
+        'challenge_complete'
+      );
+    }
+
+    return {
+      success: true,
+      newProgress,
+      completed: isCompleted,
+      rewardPoints: isCompleted ? challenge.rewardPoints : 0,
+    };
+  } catch (error) {
+    console.error("Error updating challenge progress:", error);
+    return { success: false, message: 'Failed to update progress' };
+  }
+}
+
+export async function checkAndUpdateChallenges(userId: number, action: 'report' | 'collect', amount?: number) {
+  try {
+    const activeChallenges = await getActiveChallenges();
+    const userChallenges = await getUserChallenges(userId);
+
+    for (const challenge of activeChallenges) {
+      // Check if user is participating
+      const userChallenge = userChallenges.find(uc => uc.id === challenge.id);
+      
+      let shouldUpdate = false;
+      let increment = 0;
+
+      // Determine if this action affects this challenge
+      if (action === 'report' && challenge.goalType === 'reports_count') {
+        shouldUpdate = true;
+        increment = 1;
+      } else if (action === 'collect' && challenge.goalType === 'collections_count') {
+        shouldUpdate = true;
+        increment = 1;
+      } else if (action === 'collect' && challenge.goalType === 'waste_collected' && amount) {
+        shouldUpdate = true;
+        increment = amount;
+      }
+
+      if (shouldUpdate) {
+        await updateChallengeProgress(userId, challenge.id, increment);
+      }
+    }
+  } catch (error) {
+    console.error("Error checking and updating challenges:", error);
+  }
+}

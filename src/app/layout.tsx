@@ -8,6 +8,7 @@ import Sidebar from "@/components/Sidebar"
 import 'leaflet/dist/leaflet.css'
 import { Toaster } from 'react-hot-toast'
 import { getAvailableRewards, getUserByEmail } from '@/utils/db/actions'
+import { usePathname } from 'next/navigation'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,37 +19,63 @@ export default function RootLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [totalEarnings, setTotalEarnings] = useState(0)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const pathname = usePathname()
 
   useEffect(() => {
-    const fetchTotalEarnings = async () => {
+    const checkAuthAndFetchData = async () => {
       try {
         const userEmail = localStorage.getItem('userEmail')
+        
         if (userEmail) {
+          setIsLoggedIn(true)
           const user = await getUserByEmail(userEmail)
           console.log('user from layout', user);
           
           if (user) {
             const availableRewards = await getAvailableRewards(user.id) as any
             console.log('availableRewards from layout', availableRewards);
-                        setTotalEarnings(availableRewards)
+            setTotalEarnings(availableRewards)
           }
+        } else {
+          setIsLoggedIn(false)
         }
       } catch (error) {
-        console.error('Error fetching total earnings:', error)
+        console.error('Error fetching user data:', error)
+        setIsLoggedIn(false)
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    fetchTotalEarnings()
-  }, [])
+    checkAuthAndFetchData()
+    
+    // Listen for storage changes (login/logout from other tabs)
+    const handleStorageChange = () => {
+      const userEmail = localStorage.getItem('userEmail')
+      setIsLoggedIn(!!userEmail)
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [pathname])
 
   return (
     <html lang="en">
       <body className={inter.className}>
         <div className="min-h-screen bg-gray-50 flex flex-col">
-          <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} totalEarnings={totalEarnings} />
+            <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} totalEarnings={totalEarnings} />
           <div className="flex flex-1">
-            <Sidebar open={sidebarOpen} />
-            <main className="flex-1 p-4 lg:p-8 ml-0 lg:ml-64 transition-all duration-300">
+            {/* Show Sidebar only when logged in */}
+            {isLoggedIn && <Sidebar open={sidebarOpen} />}
+            
+            {/* Adjust main content margin based on login status */}
+            <main className={`flex-1 transition-all duration-300 ${
+              isLoggedIn 
+                ? 'p-4 lg:p-8 ml-0 lg:ml-64' 
+                : 'p-0'
+            }`}>
               {children}
             </main>
           </div>

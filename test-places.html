@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Google Places API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Google Places API Test</h1>
+    <p>If the API is working, you should see autocomplete suggestions as you type.</p>
+    
+    <div id="status" class="status"></div>
+    
+    <label for="autocomplete">Search for a location:</label>
+    <input id="autocomplete" type="text" placeholder="Start typing a location...">
+    
+    <div id="result"></div>
+
+    <script>
+        const API_KEY = 'AIzaSyBFJUo_vrZyc1QCQGCrcCsHi9RcjUrWBmg';
+        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
+        
+        function showStatus(message, isError = false) {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+        }
+        
+        function initAutocomplete() {
+            showStatus('✓ Google Maps API loaded successfully!');
+            
+            const input = document.getElementById('autocomplete');
+            const autocomplete = new google.maps.places.Autocomplete(input);
+            
+            autocomplete.addListener('place_changed', function() {
+                const place = autocomplete.getPlace();
+                
+                if (!place.geometry) {
+                    resultDiv.innerHTML = '<p style="color: red;">No details available for: ' + place.name + '</p>';
+                    return;
+                }
+                
+                resultDiv.innerHTML = `
+                    <h3>Selected Place:</h3>
+                    <p><strong>Name:</strong> ${place.name || 'N/A'}</p>
+                    <p><strong>Address:</strong> ${place.formatted_address || 'N/A'}</p>
+                    <p><strong>Coordinates:</strong> ${place.geometry.location.lat()}, ${place.geometry.location.lng()}</p>
+                `;
+                
+                showStatus('✓ Place selected successfully!');
+            });
+        }
+        
+        window.initAutocomplete = initAutocomplete;
+        
+        // Load Google Maps API
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&callback=initAutocomplete`;
+        script.async = true;
+        script.defer = true;
+        script.onerror = function() {
+            showStatus('✗ Failed to load Google Maps API. Check your API key and billing.', true);
+        };
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>

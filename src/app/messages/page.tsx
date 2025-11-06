@@ -40,7 +40,7 @@ export default function MessagesPage() {
       if (!API_KEY) throw new Error('API key is missing')
 
       const genAI = new GoogleGenerativeAI(API_KEY)
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" })
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
       console.log('Sending message:', newMessage.content)
       const result = await model.generateContent(newMessage.content)

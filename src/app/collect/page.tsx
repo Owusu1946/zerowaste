@@ -7,6 +7,23 @@ import { toast } from 'react-hot-toast'
 import { getWasteCollectionTasks, updateTaskStatus, saveReward, saveCollectedWaste, getUserByEmail } from '@/utils/db/actions'
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
+const extractJsonPayload = (rawText: string) => {
+  const withoutFences = rawText
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  const jsonStart = withoutFences.indexOf('{');
+  const jsonEnd = withoutFences.lastIndexOf('}');
+
+  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) {
+    throw new Error('No JSON object found in model response');
+  }
+
+  const candidate = withoutFences.slice(jsonStart, jsonEnd + 1);
+  return JSON.parse(candidate);
+};
+
 // Make sure to set your Gemini API key in your environment variables
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
 
@@ -120,7 +137,7 @@ export default function CollectPage() {
     
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey!)
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
       const base64Data = readFileAsBase64(verificationImage)
 
@@ -148,17 +165,18 @@ export default function CollectPage() {
       const result = await model.generateContent([prompt, ...imageParts])
       const response = await result.response
       const text = response.text()
-      
+
       try {
-        const parsedResult = JSON.parse(text)
+        const parsedResult = extractJsonPayload(text)
+
         setVerificationResult({
-          wasteTypeMatch: parsedResult.wasteTypeMatch,
-          quantityMatch: parsedResult.quantityMatch,
-          confidence: parsedResult.confidence
+          wasteTypeMatch: Boolean(parsedResult.wasteTypeMatch),
+          quantityMatch: Boolean(parsedResult.quantityMatch),
+          confidence: Number(parsedResult.confidence ?? 0)
         })
         setVerificationStatus('success')
-        
-        if (parsedResult.wasteTypeMatch && parsedResult.quantityMatch && parsedResult.confidence > 0.7) {
+
+        if (parsedResult.wasteTypeMatch && parsedResult.quantityMatch && Number(parsedResult.confidence ?? 0) > 0.7) {
           await handleStatusChange(selectedTask.id, 'verified')
           const earnedReward = Math.floor(Math.random() * 50) + 10 // Random reward between 10 and 59
           
@@ -180,9 +198,7 @@ export default function CollectPage() {
           })
         }
       } catch (error) {
-        console.log(error);
-        
-        console.error('Failed to parse JSON response:', text)
+        console.error('Failed to parse JSON response:', text, error)
         setVerificationStatus('failure')
       }
     } catch (error) {

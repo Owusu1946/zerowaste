@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {  MapPin, Upload, CheckCircle, Loader } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { StandaloneSearchBox,  useJsApiLoader } from '@react-google-maps/api'
+import { Autocomplete,  useJsApiLoader } from '@react-google-maps/api'
 import { Libraries } from '@react-google-maps/api';
 import { createUser, getUserByEmail, createReport, getRecentReports } from '@/utils/db/actions';
 import { useRouter } from 'next/navigation';
@@ -59,7 +59,7 @@ export default function ReportPage() {
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [searchBox, setSearchBox] = useState<google.maps.places.SearchBox | null>(null);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -67,25 +67,19 @@ export default function ReportPage() {
     libraries: libraries
   });
 
-  const onLoad = useCallback((ref: google.maps.places.SearchBox) => {
-    setSearchBox(ref);
+  const onLoad = useCallback((ref: google.maps.places.Autocomplete) => {
+    setAutocomplete(ref);
   }, []);
 
-  const onPlacesChanged = () => {
-    if (searchBox) {
-      const places = searchBox.getPlaces();
-      if (places && places.length > 0) {
-        const place = places[0];
-        const address = place.formatted_address || '';
+  const onPlaceChanged = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+      if (place && place.formatted_address) {
+        const address = place.formatted_address;
         setNewReport(prev => ({
           ...prev,
           location: address,
         }));
-        // Update the input field directly
-        const input = document.getElementById('location') as HTMLInputElement;
-        if (input) {
-          input.value = address;
-        }
       }
     }
   };
@@ -314,20 +308,25 @@ export default function ReportPage() {
           <div>
             <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">Location</label>
             {isLoaded ? (
-              <StandaloneSearchBox
+              <Autocomplete
                 onLoad={onLoad}
-                onPlacesChanged={onPlacesChanged}
+                onPlaceChanged={onPlaceChanged}
+                options={{
+                  types: ['geocode', 'establishment'],
+                  fields: ['formatted_address', 'geometry', 'name']
+                }}
               >
                 <input
                   type="text"
                   id="location"
                   name="location"
-                  defaultValue={newReport.location}
+                  value={newReport.location}
+                  onChange={handleInputChange}
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300"
                   placeholder="Search for a location..."
                 />
-              </StandaloneSearchBox>
+              </Autocomplete>
             ) : (
               <input
                 type="text"

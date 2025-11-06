@@ -231,6 +231,8 @@ export async function getWasteCollectionTasks(limit: number = 20) {
         status: Reports.status,
         date: Reports.createdAt,
         collectorId: Reports.collectorId,
+        imageUrl: Reports.imageUrl,
+        verificationResult: Reports.verificationResult,
       })
       .from(Reports)
       .limit(limit)

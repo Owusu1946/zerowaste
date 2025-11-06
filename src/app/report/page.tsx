@@ -52,10 +52,22 @@ export default function ReportPage() {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verifying' | 'success' | 'failure'>('idle')
+  const [gpsCoordinates, setGpsCoordinates] = useState<{ lat: number; lng: number; accuracy: number } | null>(null)
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'requesting' | 'success' | 'denied' | 'unavailable'>('idle')
   const [verificationResult, setVerificationResult] = useState<{
     wasteType: string;
     quantity: string;
     confidence: number;
+    binColor: string;
+    gpsCoordinates?: { lat: number; lng: number; accuracy: number };
+    visualDescription: {
+      binDetails: string;
+      wasteColors: string;
+      surroundings: string;
+      groundCondition: string;
+      environmentalMarkers: string;
+      uniqueIdentifiers: string;
+    };
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -98,7 +110,62 @@ export default function ReportPage() {
         setPreview(e.target?.result as string)
       }
       reader.readAsDataURL(selectedFile)
+      
+      // Capture GPS coordinates when image is uploaded
+      captureGPSCoordinates()
     }
+  }
+
+  const captureGPSCoordinates = () => {
+    console.log('\n📍 ===== CAPTURING GPS COORDINATES =====');
+    
+    if (!('geolocation' in navigator)) {
+      console.error('❌ Geolocation not supported by browser');
+      setGpsStatus('unavailable')
+      toast.error('GPS not available on this device');
+      return
+    }
+
+    setGpsStatus('requesting')
+    console.log('🔄 Requesting location permission...');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        }
+        setGpsCoordinates(coords)
+        setGpsStatus('success')
+        
+        console.log('✅ GPS coordinates captured!');
+        console.log('📍 Latitude:', coords.lat);
+        console.log('📍 Longitude:', coords.lng);
+        console.log('🎯 Accuracy:', coords.accuracy, 'meters');
+        console.log('==========================================\n');
+        
+        toast.success(`📍 Location captured! Accuracy: ${Math.round(coords.accuracy)}m`);
+      },
+      (error) => {
+        console.error('❌ GPS error:', error.message);
+        setGpsStatus('denied')
+        
+        if (error.code === error.PERMISSION_DENIED) {
+          toast.error('📍 Location permission denied. Please enable location services.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          toast.error('📍 Location unavailable. Please try again.');
+        } else if (error.code === error.TIMEOUT) {
+          toast.error('📍 Location request timed out. Please try again.');
+        }
+        console.log('==========================================\n');
+      },
+      {
+        enableHighAccuracy: true,  // Use GPS for best accuracy
+        timeout: 10000,            // 10 second timeout
+        maximumAge: 0              // Don't use cached position
+      }
+    )
   }
 
   const readFileAsBase64 = (file: File): Promise<string> => {
@@ -130,16 +197,36 @@ export default function ReportPage() {
         },
       ];
 
-      const prompt = `You are an expert in waste management and recycling. Analyze this image and provide:
+      const prompt = `You are an expert in waste management and recycling. Analyze this image in EXTREME DETAIL and provide:
         1. The type of waste (e.g., plastic, paper, glass, metal, organic)
         2. An estimate of the quantity or amount (in kg or liters)
         3. Your confidence level in this assessment (as a percentage)
+        4. THE BIN COLOR - This is CRITICAL! Identify the dominant color of the waste container/bin visible in the image. Options: "blue", "green", "black", "grey", "yellow", "red", "brown", "white", or "mixed" if multiple bins. If no bin visible, use "none".
+        5. DETAILED VISUAL DESCRIPTION for verification purposes:
+           - Bin Details: Describe the container/bin material, size, brand markings, damage/wear, any labels or text visible (excluding color as it's a separate field)
+           - Waste Colors: Specific colors of the waste items visible (be very specific, e.g., "bright red plastic bottle cap, translucent blue bag")
+           - Surroundings: Describe background elements (buildings, walls, vegetation, nearby objects, landmarks, street features)
+           - Ground Condition: Describe the surface (concrete, asphalt, grass, dirt, tiles), any markings, stains, or patterns
+           - Environmental Markers: Lighting conditions, shadows direction, weather indicators, time of day clues
+           - Unique Identifiers: Any distinctive features that make this location/waste unique (graffiti, cracks, specific patterns, signage)
+        
+        IMPORTANT: The bin color you identify will be used by collectors to verify they're at the correct location!
+        Be VERY specific and detailed in your descriptions. These details will be used to verify when someone collects this waste.
         
         Respond in JSON format like this:
         {
           "wasteType": "type of waste",
           "quantity": "estimated quantity with unit",
-          "confidence": confidence level as a number between 0 and 1
+          "confidence": confidence level as a number between 0 and 1,
+          "binColor": "blue/green/black/grey/yellow/red/brown/white/mixed/none",
+          "visualDescription": {
+            "binDetails": "detailed bin description (material, size, markings - no color)",
+            "wasteColors": "specific color details of waste",
+            "surroundings": "background and surrounding details",
+            "groundCondition": "surface and ground details",
+            "environmentalMarkers": "lighting, shadows, weather clues",
+            "uniqueIdentifiers": "distinctive features for verification"
+          }
         }`;
 
       const result = await model.generateContent([prompt, ...imageParts]);
@@ -148,7 +235,35 @@ export default function ReportPage() {
 
       try {
         const parsedResult = extractJsonPayload(text);
-        if (parsedResult.wasteType && parsedResult.quantity && parsedResult.confidence) {
+        
+        console.log('\n🎯 ===== WASTE VERIFICATION RESULT =====');
+        console.log('📦 Waste Type:', parsedResult.wasteType || 'NOT DETECTED');
+        console.log('⚖️  Quantity:', parsedResult.quantity || 'NOT DETECTED');
+        console.log('🎨 BIN COLOR:', parsedResult.binColor || '❌ NOT DETECTED');
+        console.log('📊 Confidence:', parsedResult.confidence ? `${(parsedResult.confidence * 100).toFixed(1)}%` : 'NOT DETECTED');
+        console.log('📸 Visual Description:', parsedResult.visualDescription ? '✅ Available' : '❌ Missing');
+        console.log('======================================\n');
+        
+        if (parsedResult.binColor) {
+          console.log(`✅ BIN COLOR RECORDED: "${parsedResult.binColor.toUpperCase()}"`);
+          console.log('📌 This color will be used by collectors to verify location!');
+          console.log('💾 Storing in database for verification...\n');
+        } else {
+          console.warn('⚠️ WARNING: No bin color detected!');
+          console.warn('⚠️ Collectors may not be able to verify this report!\n');
+        }
+        
+        // Add GPS coordinates to result if available
+        if (gpsCoordinates) {
+          parsedResult.gpsCoordinates = gpsCoordinates;
+          console.log('✅ GPS COORDINATES ADDED TO VERIFICATION:');
+          console.log('📍 Lat/Lng:', gpsCoordinates.lat, ',', gpsCoordinates.lng);
+          console.log('🎯 Accuracy:', gpsCoordinates.accuracy, 'meters\n');
+        } else {
+          console.warn('⚠️ No GPS coordinates available - location verification may be less accurate\n');
+        }
+        
+        if (parsedResult.wasteType && parsedResult.quantity && parsedResult.confidence && parsedResult.binColor && parsedResult.visualDescription) {
           setVerificationResult(parsedResult);
           setVerificationStatus('success');
           setNewReport((prev) => ({
@@ -156,13 +271,24 @@ export default function ReportPage() {
             type: parsedResult.wasteType,
             amount: parsedResult.quantity,
           }));
+          console.log('✅ Verification successful! All fields detected.');
+          toast.success(`✅ Verified! Bin color: ${parsedResult.binColor.toUpperCase()}`);
         } else {
-          console.error('Invalid verification result:', parsedResult);
+          console.error('❌ Invalid verification result - Missing required fields:');
+          if (!parsedResult.wasteType) console.error('  - wasteType is missing');
+          if (!parsedResult.quantity) console.error('  - quantity is missing');
+          if (!parsedResult.confidence) console.error('  - confidence is missing');
+          if (!parsedResult.binColor) console.error('  - binColor is missing');
+          if (!parsedResult.visualDescription) console.error('  - visualDescription is missing');
+          console.error('Full result:', parsedResult);
           setVerificationStatus('failure');
+          toast.error('Verification failed. Please try again.');
         }
       } catch (error) {
-        console.error('Failed to parse JSON response:', text, error);
+        console.error('❌ Failed to parse JSON response:', error);
+        console.error('Raw text received:', text);
         setVerificationStatus('failure');
+        toast.error('Failed to process verification. Please try again.');
       }
     } catch (error) {
       console.error('Error verifying waste:', error);
@@ -177,6 +303,18 @@ export default function ReportPage() {
       return;
     }
     
+    console.log('\n💾 ===== SUBMITTING REPORT TO DATABASE =====');
+    console.log('📍 Location:', newReport.location);
+    console.log('📦 Waste Type:', newReport.type);
+    console.log('⚖️  Amount:', newReport.amount);
+    console.log('🎨 BIN COLOR:', verificationResult?.binColor || '⚠️ MISSING');
+    console.log('📍 GPS Coordinates:', verificationResult?.gpsCoordinates ? 
+      `${verificationResult.gpsCoordinates.lat}, ${verificationResult.gpsCoordinates.lng} (±${Math.round(verificationResult.gpsCoordinates.accuracy)}m)` : 
+      '⚠️ NOT CAPTURED');
+    console.log('📸 Image URL:', preview ? 'Available' : 'None');
+    console.log('📄 Full Verification Result:', verificationResult);
+    console.log('==========================================\n');
+    
     setIsSubmitting(true);
     try {
       const report = await createReport(
@@ -185,8 +323,14 @@ export default function ReportPage() {
         newReport.type,
         newReport.amount,
         preview || undefined,
-        verificationResult ? JSON.stringify(verificationResult) : undefined
+        undefined,  // type parameter (unused)
+        verificationResult ? JSON.stringify(verificationResult) : undefined  // verificationResult (7th param)
       ) as any;
+      
+      console.log('✅ Report created successfully!');
+      console.log('📝 Report ID:', report.id);
+      console.log('🎨 Bin color stored:', verificationResult?.binColor);
+      console.log('📌 Collectors can now verify using this bin color!\n');
       
       const formattedReport = {
         id: report.id,
@@ -289,15 +433,61 @@ export default function ReportPage() {
         </Button>
 
         {verificationStatus === 'success' && verificationResult && (
-          <div className="bg-green-50 border-l-4 border-green-400 p-3 sm:p-4 mb-6 sm:mb-8 rounded-r-xl">
-            <div className="flex items-center">
-              <CheckCircle className="h-6 w-6 text-green-400 mr-3" />
-              <div>
-                <h3 className="text-lg font-medium text-green-800">Verification Successful</h3>
-                <div className="mt-2 text-sm text-green-700">
-                  <p>Waste Type: {verificationResult.wasteType}</p>
-                  <p>Quantity: {verificationResult.quantity}</p>
-                  <p>Confidence: {(verificationResult.confidence * 100).toFixed(2)}%</p>
+          <div className="space-y-4 mb-6 sm:mb-8">
+            {/* Success Message */}
+            <div className="bg-green-50 border-l-4 border-green-400 p-3 sm:p-4 rounded-r-xl">
+              <div className="flex items-center">
+                <CheckCircle className="h-6 w-6 text-green-400 mr-3" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-medium text-green-800">✅ Verification Successful</h3>
+                  <div className="mt-2 text-sm text-green-700 space-y-1">
+                    <p><strong>Waste Type:</strong> {verificationResult.wasteType}</p>
+                    <p><strong>Quantity:</strong> {verificationResult.quantity}</p>
+                    <p><strong>Confidence:</strong> {(verificationResult.confidence * 100).toFixed(1)}%</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bin Color Display - Prominent */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 p-4 sm:p-6 rounded-xl shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-1 uppercase tracking-wide">
+                    🎨 Bin Color Detected
+                  </h4>
+                  <p className="text-3xl sm:text-4xl font-bold text-blue-800 uppercase tracking-wider">
+                    {verificationResult.binColor}
+                  </p>
+                  <p className="text-xs sm:text-sm text-blue-600 mt-2">
+                    📌 Collectors will verify this color at pickup location
+                  </p>
+                </div>
+                
+                {/* Visual Color Indicator */}
+                <div className="ml-4">
+                  <div 
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl shadow-lg border-4 border-white"
+                    style={{
+                      backgroundColor: 
+                        verificationResult.binColor === 'blue' ? '#3B82F6' :
+                        verificationResult.binColor === 'green' ? '#22C55E' :
+                        verificationResult.binColor === 'black' ? '#1F2937' :
+                        verificationResult.binColor === 'grey' || verificationResult.binColor === 'gray' ? '#6B7280' :
+                        verificationResult.binColor === 'yellow' ? '#EAB308' :
+                        verificationResult.binColor === 'red' ? '#EF4444' :
+                        verificationResult.binColor === 'brown' ? '#92400E' :
+                        verificationResult.binColor === 'white' ? '#F3F4F6' :
+                        '#9333EA'
+                    }}
+                  >
+                    <div className="w-full h-full flex items-center justify-center text-white font-bold text-xs">
+                      {verificationResult.binColor === 'white' ? '⚪' : ''}
+                    </div>
+                  </div>
+                  <p className="text-xs text-center mt-1 text-gray-600 font-medium">
+                    {verificationResult.binColor.toUpperCase()}
+                  </p>
                 </div>
               </div>
             </div>
@@ -338,6 +528,22 @@ export default function ReportPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300"
                 placeholder="Enter waste location"
               />
+            )}
+            {gpsCoordinates && (
+              <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-xs text-green-700 font-medium">
+                  ✅ GPS Location Captured
+                </p>
+                <p className="text-xs text-green-600 mt-1">
+                  📍 {gpsCoordinates.lat.toFixed(6)}, {gpsCoordinates.lng.toFixed(6)}
+                </p>
+                <p className="text-xs text-gray-600">
+                  🎯 Accuracy: ±{Math.round(gpsCoordinates.accuracy)}m
+                </p>
+                <p className="text-xs text-blue-600 mt-1 italic">
+                  💡 Collectors will verify within 100m of this location
+                </p>
+              </div>
             )}
           </div>
           <div>

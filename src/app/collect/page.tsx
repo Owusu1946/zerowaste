@@ -35,6 +35,8 @@ type CollectionTask = {
   status: 'pending' | 'in_progress' | 'completed' | 'verified'
   date: string
   collectorId: number | null
+  imageUrl?: string
+  verificationResult?: any
 }
 
 const ITEMS_PER_PAGE = 5
@@ -81,12 +83,17 @@ export default function CollectPage() {
   }, [])
 
   const [selectedTask, setSelectedTask] = useState<CollectionTask | null>(null)
-  const [verificationImage, setVerificationImage] = useState<string | null>(null)
+  const [binImage, setBinImage] = useState<string | null>(null)
+  const [collectorGPS, setCollectorGPS] = useState<{ lat: number; lng: number; accuracy: number } | null>(null)
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'requesting' | 'success' | 'denied' | 'unavailable'>('idle')
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verifying' | 'success' | 'failure'>('idle')
   const [verificationResult, setVerificationResult] = useState<{
-    wasteTypeMatch: boolean;
-    quantityMatch: boolean;
+    binColorDetected: string;
+    binColorMatch: boolean;
+    locationContextValid: boolean;
     confidence: number;
+    gpsDistance?: number;
+    gpsMatch?: boolean;
   } | null>(null)
   const [reward, setReward] = useState<number | null>(null)
 
@@ -112,15 +119,82 @@ export default function CollectPage() {
     }
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBinImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
       reader.onloadend = () => {
-        setVerificationImage(reader.result as string)
+        setBinImage(reader.result as string)
       }
       reader.readAsDataURL(file)
     }
+  }
+
+  const captureCollectorGPS = () => {
+    console.log('\n📍 ===== CAPTURING COLLECTOR GPS =====');
+    
+    if (!('geolocation' in navigator)) {
+      console.error('❌ Geolocation not supported');
+      setGpsStatus('unavailable')
+      toast.error('GPS not available on this device');
+      return
+    }
+
+    setGpsStatus('requesting')
+    console.log('🔄 Requesting location...');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        }
+        setCollectorGPS(coords)
+        setGpsStatus('success')
+        
+        console.log('✅ Collector GPS captured!');
+        console.log('📍 Latitude:', coords.lat);
+        console.log('📍 Longitude:', coords.lng);
+        console.log('🎯 Accuracy:', coords.accuracy, 'meters');
+        console.log('==========================================\n');
+        
+        toast.success(`📍 Location captured! Accuracy: ${Math.round(coords.accuracy)}m`);
+      },
+      (error) => {
+        console.error('❌ GPS error:', error.message);
+        setGpsStatus('denied')
+        
+        if (error.code === error.PERMISSION_DENIED) {
+          toast.error('📍 Location permission denied. Please enable location.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          toast.error('📍 Location unavailable. Please try again.');
+        } else if (error.code === error.TIMEOUT) {
+          toast.error('📍 Location request timed out.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
+  }
+
+  // Calculate distance between two GPS coordinates (Haversine formula)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
   }
 
   const readFileAsBase64 = (dataUrl: string): string => {
@@ -128,10 +202,72 @@ export default function CollectPage() {
   }
 
   const handleVerify = async () => {
-    if (!selectedTask || !verificationImage || !user) {
-      toast.error('Missing required information for verification.')
+    if (!selectedTask || !binImage || !collectorGPS || !user) {
+      toast.error('Please upload bin photo and ensure GPS location is captured.')
       return
     }
+
+    // Extract bin color and GPS from reporter's verification result
+    let reportedBinColor = 'unknown'
+    let reporterGPS = null
+    
+    try {
+      const verificationResult = typeof selectedTask.verificationResult === 'string' 
+        ? JSON.parse(selectedTask.verificationResult)
+        : selectedTask.verificationResult
+      
+      reportedBinColor = verificationResult?.binColor || 'unknown'
+      reporterGPS = verificationResult?.gpsCoordinates
+      
+      console.log('\n🔍 ===== VERIFYING COLLECTION =====');
+      console.log('📦 Task:', selectedTask.id);
+      console.log('🎨 Expected bin color:', reportedBinColor);
+      console.log('📍 Reporter GPS:', reporterGPS ? 
+        `${reporterGPS.lat.toFixed(6)}, ${reporterGPS.lng.toFixed(6)} (±${Math.round(reporterGPS.accuracy)}m)` : 
+        'NOT AVAILABLE');
+      console.log('📍 Collector GPS:', collectorGPS.lat.toFixed(6), collectorGPS.lng.toFixed(6), `(±${Math.round(collectorGPS.accuracy)}m)`);
+      
+    } catch (e) {
+      console.error('Failed to parse verification result:', e)
+      toast.error('Cannot verify - report data incomplete.')
+      return
+    }
+
+    if (reportedBinColor === 'unknown' || reportedBinColor === 'none') {
+      toast.error('Cannot verify - no bin color recorded in original report.')
+      return
+    }
+
+    // Calculate GPS distance if reporter GPS is available
+    let gpsDistance = null
+    let gpsMatch = false
+    
+    if (reporterGPS) {
+      gpsDistance = calculateDistance(
+        reporterGPS.lat,
+        reporterGPS.lng,
+        collectorGPS.lat,
+        collectorGPS.lng
+      )
+      
+      const acceptableRadius = 100 // 100 meters tolerance
+      gpsMatch = gpsDistance <= acceptableRadius
+      
+      console.log('📏 GPS Distance:', Math.round(gpsDistance), 'meters');
+      console.log('✅ Acceptable radius:', acceptableRadius, 'meters');
+      console.log('🎯 GPS Match:', gpsMatch ? 'YES' : 'NO');
+      console.log('==========================================\n');
+    } else {
+      console.warn('⚠️ No reporter GPS available - skipping GPS verification');
+    }
+
+    console.log('\n🤖 ===== SENDING TO AI FOR VERIFICATION =====');
+    console.log('📤 GPS Context:');
+    console.log('   Reporter:', reporterGPS ? `${reporterGPS.lat.toFixed(6)}, ${reporterGPS.lng.toFixed(6)}` : 'N/A');
+    console.log('   Collector:', `${collectorGPS.lat.toFixed(6)}, ${collectorGPS.lng.toFixed(6)}`);
+    console.log('   Distance:', gpsDistance !== null ? `${Math.round(gpsDistance)}m` : 'N/A');
+    console.log('   Status:', gpsMatch ? '✓ PASS (< 100m)' : '✗ FAIL (> 100m)');
+    console.log('==========================================\n');
 
     setVerificationStatus('verifying')
     
@@ -139,28 +275,41 @@ export default function CollectPage() {
       const genAI = new GoogleGenerativeAI(geminiApiKey!)
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
-      const base64Data = readFileAsBase64(verificationImage)
+      const binBase64 = readFileAsBase64(binImage)
 
       const imageParts = [
         {
           inlineData: {
-            data: base64Data,
-            mimeType: 'image/jpeg', // Adjust this if you know the exact type
+            data: binBase64,
+            mimeType: 'image/jpeg',
           },
         },
       ]
 
-      const prompt = `You are an expert in waste management and recycling. Analyze this image and provide:
-        1. Confirm if the waste type matches: ${selectedTask.wasteType}
-        2. Estimate if the quantity matches: ${selectedTask.amount}
-        3. Your confidence level in this assessment (as a percentage)
-        
-        Respond in JSON format like this:
-        {
-          "wasteTypeMatch": true/false,
-          "quantityMatch": true/false,
-          "confidence": confidence level as a number between 0 and 1
-        }`
+      const prompt = `You are a waste collection verification expert. Analyze this image:
+
+Expected bin color: ${reportedBinColor}
+Waste type: ${selectedTask.wasteType}
+Location: ${selectedTask.location}
+${reporterGPS ? `Reporter GPS: ${reporterGPS.lat.toFixed(6)}, ${reporterGPS.lng.toFixed(6)} (±${Math.round(reporterGPS.accuracy)}m)` : ''}
+${collectorGPS ? `Collector GPS: ${collectorGPS.lat.toFixed(6)}, ${collectorGPS.lng.toFixed(6)} (±${Math.round(collectorGPS.accuracy)}m)` : ''}
+${gpsDistance !== null ? `Distance: ${Math.round(gpsDistance)}m apart` : ''}
+
+Verify:
+1. Detect the bin color in the image (blue/green/black/grey/yellow/red/brown/white)
+2. Does the bin color match the expected color "${reportedBinColor}"?
+3. Your confidence level (0-1)
+
+IMPORTANT: The collector has already collected the waste from the bin.
+We verify the bin color matches what the reporter photographed.
+GPS verification: Collector must be within 100m of reported location (${gpsMatch ? '✓ PASS' : '✗ FAIL'}).
+
+Respond in JSON format:
+{
+  "binColorDetected": "detected color",
+  "binColorMatch": true/false,
+  "confidence": number between 0 and 1
+}`
 
       const result = await model.generateContent([prompt, ...imageParts])
       const response = await result.response
@@ -170,29 +319,39 @@ export default function CollectPage() {
         const parsedResult = extractJsonPayload(text)
 
         setVerificationResult({
-          wasteTypeMatch: Boolean(parsedResult.wasteTypeMatch),
-          quantityMatch: Boolean(parsedResult.quantityMatch),
-          confidence: Number(parsedResult.confidence ?? 0)
-        })
+          binColorDetected: String(parsedResult.binColorDetected || 'unknown'),
+          binColorMatch: Boolean(parsedResult.binColorMatch),
+          locationContextValid: gpsMatch,  // Use GPS match result
+          confidence: Number(parsedResult.confidence ?? 0),
+          gpsDistance: gpsDistance || 0,
+          gpsMatch: gpsMatch
+        } as any)
         setVerificationStatus('success')
 
-        if (parsedResult.wasteTypeMatch && parsedResult.quantityMatch && Number(parsedResult.confidence ?? 0) > 0.7) {
+        if (parsedResult.binColorMatch && gpsMatch && Number(parsedResult.confidence ?? 0) > 0.7) {
           await handleStatusChange(selectedTask.id, 'verified')
-          const earnedReward = Math.floor(Math.random() * 50) + 10 // Random reward between 10 and 59
+          
+          // Calculate reward based on amount (1 point per kg)
+          const amountMatch = selectedTask.amount.match(/(\d+(\.\d+)?)/)
+          const amount = amountMatch ? parseFloat(amountMatch[0]) : 10
+          const earnedReward = Math.max(10, Math.floor(amount)) // Minimum 10 points
           
           // Save the reward
-          await saveReward(user.id, earnedReward)
+          await saveReward(user.id, earnedReward, amount)
 
           // Save the collected waste
           await saveCollectedWaste(selectedTask.id, user.id, parsedResult)
 
           setReward(earnedReward)
-          toast.success(`Verification successful! You earned ${earnedReward} tokens!`, {
+          toast.success(`✅ Collection verified! You earned ${earnedReward} points!`, {
             duration: 5000,
             position: 'top-center',
           })
         } else {
-          toast.error('Verification failed. The collected waste does not match the reported waste.', {
+          const reason = !parsedResult.binColorMatch 
+            ? 'Bin color does not match the waste type' 
+            : 'Location surroundings could not be verified'
+          toast.error(`❌ Verification failed: ${reason}`, {
             duration: 5000,
             position: 'top-center',
           })
@@ -200,10 +359,12 @@ export default function CollectPage() {
       } catch (error) {
         console.error('Failed to parse JSON response:', text, error)
         setVerificationStatus('failure')
+        toast.error('Failed to process verification. Please try again.')
       }
     } catch (error) {
       console.error('Error verifying waste:', error)
       setVerificationStatus('failure')
+      toast.error('Verification error. Please check your connection and try again.')
     }
   }
 
@@ -250,26 +411,13 @@ export default function CollectPage() {
                   </h2>
                   <StatusBadge status={task.status} />
                 </div>
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-600 mb-3">
-                  <div className="flex items-center relative">
-                    <Trash2 className="w-4 h-4 mr-2 text-gray-500" />
-                    <span 
-                      onMouseEnter={() => setHoveredWasteType(task.wasteType)}
-                      onMouseLeave={() => setHoveredWasteType(null)}
-                      className="cursor-pointer"
-                    >
-                      {task.wasteType.length > 8 ? `${task.wasteType.slice(0, 8)}...` : task.wasteType}
-                    </span>
-                    {hoveredWasteType === task.wasteType && (
-                      <div className="absolute left-0 top-full mt-1 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-10">
-                        {task.wasteType}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center">
-                    <Weight className="w-4 h-4 mr-2 text-gray-500" />
-                    {task.amount}
-                  </div>
+                <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-600 mb-3">
+                  {task.verificationResult?.visualDescription && (
+                    <div className="flex items-center">
+                      <MapPin className="w-4 h-4 mr-2 text-blue-500" />
+                      <span className="text-blue-600 font-medium">Visual clues available</span>
+                    </div>
+                  )}
                   <div className="flex items-center">
                     <Calendar className="w-4 h-4 mr-2 text-gray-500" />
                     {task.date}
@@ -321,62 +469,276 @@ export default function CollectPage() {
         </>
       )}
 
-      {selectedTask && (
+      {selectedTask && (() => {
+        // Extract bin color from reporter's verification
+        console.log('\n🔍 ===== EXTRACTING BIN COLOR FOR COLLECTION =====');
+        console.log('📦 Task ID:', selectedTask.id);
+        console.log('📍 Location:', selectedTask.location);
+        console.log('🗑️ Waste Type:', selectedTask.wasteType);
+        console.log('📄 Verification Result (raw):', selectedTask.verificationResult);
+        console.log('📄 Type of verification result:', typeof selectedTask.verificationResult);
+        
+        let reportedBinColor = 'unknown'
+        try {
+          const verificationResult = typeof selectedTask.verificationResult === 'string' 
+            ? JSON.parse(selectedTask.verificationResult)
+            : selectedTask.verificationResult
+          
+          console.log('📄 Parsed verification result:', verificationResult);
+          console.log('🎨 Bin color from result:', verificationResult?.binColor);
+          
+          reportedBinColor = verificationResult?.binColor || 'unknown'
+          
+          if (reportedBinColor !== 'unknown') {
+            console.log(`✅ BIN COLOR FOUND: "${reportedBinColor.toUpperCase()}"`);
+          } else {
+            console.warn('⚠️ NO BIN COLOR FOUND in verification result!');
+            console.warn('Full verification result object:', verificationResult);
+          }
+        } catch (e) {
+          console.error('❌ Failed to parse verification result:', e);
+          console.error('Raw data:', selectedTask.verificationResult);
+        }
+        console.log('==========================================\n');
+
+        return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Verify Collection</h3>
-            <p className="mb-3 sm:mb-4 text-xs sm:text-sm text-gray-600">Upload a photo of the collected waste to verify and earn your reward.</p>
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg sm:text-xl font-semibold mb-2">Verify Collection</h3>
+            <p className="text-sm text-gray-600 mb-1">📍 {selectedTask.location}</p>
+            <p className="text-sm text-gray-600 mb-4">🗑️ {selectedTask.wasteType} • {selectedTask.amount}</p>
+            
+            {/* Expected Bin Color Info */}
+            {reportedBinColor !== 'unknown' && reportedBinColor !== 'none' ? (
+              <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
+                <p className="text-sm font-medium text-blue-900">
+                  Expected bin color: <span className="px-2 py-0.5 bg-blue-100 rounded font-bold">{reportedBinColor.toUpperCase()}</span>
+                </p>
+                <p className="text-xs text-blue-700 mt-1">📸 Detected from reporter's photo</p>
+              </div>
+            ) : (
+              <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded">
+                <p className="text-sm font-medium text-yellow-900">
+                  ⚠️ No bin color recorded in original report
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">Verification may not be possible</p>
+              </div>
+            )}
+
+            {/* Reported GPS Location Info */}
+            {(() => {
+              try {
+                const verificationResult = typeof selectedTask.verificationResult === 'string' 
+                  ? JSON.parse(selectedTask.verificationResult)
+                  : selectedTask.verificationResult
+                const reporterGPS = verificationResult?.gpsCoordinates
+                
+                return reporterGPS ? (
+                  <div className="mb-4 p-3 bg-green-50 border-l-4 border-green-500 rounded">
+                    <p className="text-sm font-medium text-green-900">
+                      📍 Reported GPS Location
+                    </p>
+                    <p className="text-xs text-green-700 mt-1">
+                      Coordinates: {reporterGPS.lat.toFixed(6)}, {reporterGPS.lng.toFixed(6)}
+                    </p>
+                    <p className="text-xs text-green-600">
+                      Accuracy: ±{Math.round(reporterGPS.accuracy)}m
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1 italic">
+                      💡 You must be within 100m of this location to verify
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded">
+                    <p className="text-sm font-medium text-yellow-900">
+                      ⚠️ No GPS location in report
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-1">GPS verification will be skipped</p>
+                  </div>
+                )
+              } catch (e) {
+                return null
+              }
+            })()}
+
+            {/* Instructions */}
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+              <h4 className="font-semibold text-green-800 mb-2 text-sm flex items-center gap-2">
+                <Camera className="h-4 w-4" />
+                Verification Requirements
+              </h4>
+              <ol className="space-y-1 text-xs text-green-700 list-decimal list-inside">
+                <li><strong>Photo:</strong> Clear photo of the waste bin showing its color</li>
+                <li><strong>GPS:</strong> Your location will be automatically verified (within 100m of report)</li>
+              </ol>
+              <p className="text-xs text-green-600 mt-2 italic">
+                ℹ️ You've already collected the waste - we only verify bin color and GPS location!
+              </p>
+            </div>
+
+            {/* Bin Image Upload */}
             <div className="mb-4">
-              <label htmlFor="verification-image" className="block text-sm font-medium text-gray-700 mb-2">
-                Upload Image
+              <label htmlFor="bin-image" className="block text-sm font-semibold text-gray-700 mb-2">
+                1️⃣ Bin Photo (showing color)
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div className="mt-1 flex justify-center px-4 pt-4 pb-4 border-2 border-dashed rounded-md border-blue-300 bg-blue-50">
                 <div className="space-y-1 text-center">
-                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                  <div className="flex text-sm text-gray-600">
+                  <Upload className="mx-auto h-10 w-10 text-blue-500" />
+                  <div className="text-sm text-gray-600">
                     <label
-                      htmlFor="verification-image"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
+                      htmlFor="bin-image"
+                      className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500"
                     >
-                      <span>Upload a file</span>
-                      <input id="verification-image" name="verification-image" type="file" className="sr-only" onChange={handleImageUpload} accept="image/*" />
+                      <span>Upload bin photo</span>
+                      <input id="bin-image" type="file" className="sr-only" onChange={handleBinImageUpload} accept="image/*" />
                     </label>
                   </div>
-                  <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                  <p className="text-xs text-gray-500">JPG, PNG up to 10MB</p>
                 </div>
               </div>
+              {binImage && (
+                <div className="mt-2">
+                  <img src={binImage} alt="Bin" className="rounded-md w-full border-2 border-blue-300" />
+                  <p className="text-xs text-green-600 mt-1">✓ Bin photo uploaded</p>
+                </div>
+              )}
             </div>
-            {verificationImage && (
-              <img src={verificationImage} alt="Verification" className="mb-4 rounded-md w-full" />
-            )}
+
+            {/* GPS Location Status */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                2️⃣ GPS Location Verification
+              </label>
+              <div className="p-4 border-2 rounded-md border-green-300 bg-green-50">
+                {gpsStatus === 'idle' && (
+                  <div className="text-center">
+                    <MapPin className="mx-auto h-10 w-10 text-green-500 mb-2" />
+                    <Button 
+                      onClick={captureCollectorGPS}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      📍 Capture My Location
+                    </Button>
+                    <p className="text-xs text-gray-600 mt-2">Click to verify you're at the collection site</p>
+                  </div>
+                )}
+                
+                {gpsStatus === 'requesting' && (
+                  <div className="text-center">
+                    <Loader className="mx-auto h-10 w-10 text-green-500 animate-spin mb-2" />
+                    <p className="text-sm text-green-700">Capturing GPS location...</p>
+                    <p className="text-xs text-gray-600 mt-1">Please allow location access</p>
+                  </div>
+                )}
+                
+                {gpsStatus === 'success' && collectorGPS && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-center gap-2 text-green-700">
+                      <CheckCircle className="h-6 w-6" />
+                      <p className="font-semibold">✅ GPS Location Captured</p>
+                    </div>
+                    <div className="text-xs text-green-600 space-y-1 bg-white p-2 rounded">
+                      <p>📍 Coordinates: {collectorGPS.lat.toFixed(6)}, {collectorGPS.lng.toFixed(6)}</p>
+                      <p>🎯 Accuracy: ±{Math.round(collectorGPS.accuracy)} meters</p>
+                    </div>
+                  </div>
+                )}
+                
+                {gpsStatus === 'denied' && (
+                  <div className="text-center">
+                    <p className="text-red-600 text-sm mb-2">❌ Location access denied</p>
+                    <Button 
+                      onClick={captureCollectorGPS}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      Try Again
+                    </Button>
+                    <p className="text-xs text-gray-600 mt-2">Please enable location in your browser settings</p>
+                  </div>
+                )}
+                
+                {gpsStatus === 'unavailable' && (
+                  <div className="text-center">
+                    <p className="text-red-600 text-sm">❌ GPS not available on this device</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Verify Button */}
             <Button
               onClick={handleVerify}
-              className="w-full"
-              disabled={!verificationImage || verificationStatus === 'verifying'}
+              className="w-full bg-green-600 hover:bg-green-700"
+              disabled={!binImage || !collectorGPS || verificationStatus === 'verifying'}
             >
               {verificationStatus === 'verifying' ? (
                 <>
                   <Loader className="animate-spin -ml-1 mr-3 h-5 w-5" />
-                  Verifying...
+                  Verifying with AI...
                 </>
-              ) : 'Verify Collection'}
+              ) : !binImage ? 'Upload Bin Photo First' :
+                 !collectorGPS ? 'Capture GPS Location First' :
+                 'Verify Collection'}
             </Button>
+            {/* Verification Results */}
             {verificationStatus === 'success' && verificationResult && (
-              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-                <p>Waste Type Match: {verificationResult.wasteTypeMatch ? 'Yes' : 'No'}</p>
-                <p>Quantity Match: {verificationResult.quantityMatch ? 'Yes' : 'No'}</p>
-                <p>Confidence: {(verificationResult.confidence * 100).toFixed(2)}%</p>
+              <div className={`mt-4 p-4 border rounded-md ${(verificationResult.binColorMatch && verificationResult.locationContextValid) ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <h4 className={`font-semibold mb-3 flex items-center gap-2 ${(verificationResult.binColorMatch && verificationResult.locationContextValid) ? 'text-green-800' : 'text-red-800'}`}>
+                  {(verificationResult.binColorMatch && verificationResult.locationContextValid) ? '✅ Verification Passed!' : '❌ Verification Failed'}
+                </h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">{verificationResult.binColorMatch ? '✅' : '❌'}</span>
+                    <div>
+                      <p className={`font-medium ${verificationResult.binColorMatch ? 'text-green-700' : 'text-red-700'}`}>
+                        Bin Color: {verificationResult.binColorDetected}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {verificationResult.binColorMatch ? 'Matches expected color' : 'Does not match expected color'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">{verificationResult.locationContextValid ? '✅' : '❌'}</span>
+                    <div>
+                      <p className={`font-medium ${verificationResult.locationContextValid ? 'text-green-700' : 'text-red-700'}`}>
+                        GPS Location
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {verificationResult.locationContextValid ? 
+                          `Within ${Math.round(verificationResult.gpsDistance || 0)}m of reported location (✓ < 100m)` : 
+                          `Too far from reported location (${Math.round(verificationResult.gpsDistance || 0)}m > 100m)`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-300">
+                    <p className="text-xs text-gray-600">
+                      AI Confidence: <span className="font-bold">{(verificationResult.confidence * 100).toFixed(0)}%</span>
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
             {verificationStatus === 'failure' && (
               <p className="mt-2 text-red-600 text-center text-sm">Verification failed. Please try again.</p>
             )}
-            <Button onClick={() => setSelectedTask(null)} variant="outline" className="w-full mt-2">
+            <Button onClick={() => {
+              setSelectedTask(null)
+              setBinImage(null)
+              setCollectorGPS(null)
+              setGpsStatus('idle')
+              setVerificationStatus('idle')
+              setVerificationResult(null)
+              setReward(null)
+            }} variant="outline" className="w-full mt-2">
               Close
             </Button>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Add a conditional render to show user info or login prompt */}
       {/* {user ? (

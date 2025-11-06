@@ -219,17 +219,17 @@ export default function CollectPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-semibold mb-6 text-gray-800">Waste Collection Tasks</h1>
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-4 sm:mb-6 text-gray-800">Waste Collection Tasks</h1>
       
-      <div className="mb-4 flex items-center">
+      <div className="mb-4 flex items-center gap-2">
         <Input
           type="text"
           placeholder="Search by area..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="mr-2"
+          className="flex-1 text-sm sm:text-base"
         />
-        <Button variant="outline" size="icon">
+        <Button variant="outline" size="icon" className="shrink-0">
           <Search className="h-4 w-4" />
         </Button>
       </div>
@@ -240,17 +240,17 @@ export default function CollectPage() {
         </div>
       ) : (
         <>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {paginatedTasks.map(task => (
-              <div key={task.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-lg font-medium text-gray-800 flex items-center">
-                    <MapPin className="w-5 h-5 mr-2 text-gray-500" />
-                    {task.location}
+              <div key={task.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
+                <div className="flex justify-between items-start sm:items-center mb-2 gap-2">
+                  <h2 className="text-base sm:text-lg font-medium text-gray-800 flex items-center min-w-0 flex-1">
+                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2 text-gray-500 shrink-0" />
+                    <span className="truncate">{task.location}</span>
                   </h2>
                   <StatusBadge status={task.status} />
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-sm text-gray-600 mb-3">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-600 mb-3">
                   <div className="flex items-center relative">
                     <Trash2 className="w-4 h-4 mr-2 text-gray-500" />
                     <span 
@@ -277,41 +277,43 @@ export default function CollectPage() {
                 </div>
                 <div className="flex justify-end">
                   {task.status === 'pending' && (
-                    <Button onClick={() => handleStatusChange(task.id, 'in_progress')} variant="outline" size="sm">
+                    <Button onClick={() => handleStatusChange(task.id, 'in_progress')} variant="outline" size="sm" className="text-xs sm:text-sm">
                       Start Collection
                     </Button>
                   )}
                   {task.status === 'in_progress' && task.collectorId === user?.id && (
-                    <Button onClick={() => setSelectedTask(task)} variant="outline" size="sm">
+                    <Button onClick={() => setSelectedTask(task)} variant="outline" size="sm" className="text-xs sm:text-sm">
                       Complete & Verify
                     </Button>
                   )}
                   {task.status === 'in_progress' && task.collectorId !== user?.id && (
-                    <span className="text-yellow-600 text-sm font-medium">In progress by another collector</span>
+                    <span className="text-yellow-600 text-xs sm:text-sm font-medium">In progress by another collector</span>
                   )}
                   {task.status === 'verified' && (
-                    <span className="text-green-600 text-sm font-medium">Reward Earned</span>
+                    <span className="text-green-600 text-xs sm:text-sm font-medium">Reward Earned</span>
                   )}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-4 flex justify-center">
+          <div className="mt-4 flex justify-center items-center gap-2 sm:gap-4">
             <Button
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="mr-2"
+              size="sm"
+              className="text-xs sm:text-sm"
             >
               Previous
             </Button>
-            <span className="mx-2 self-center">
+            <span className="text-xs sm:text-sm self-center">
               Page {currentPage} of {pageCount}
             </span>
             <Button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, pageCount))}
               disabled={currentPage === pageCount}
-              className="ml-2"
+              size="sm"
+              className="text-xs sm:text-sm"
             >
               Next
             </Button>
@@ -321,9 +323,9 @@ export default function CollectPage() {
 
       {selectedTask && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-semibold mb-4">Verify Collection</h3>
-            <p className="mb-4 text-sm text-gray-600">Upload a photo of the collected waste to verify and earn your reward.</p>
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Verify Collection</h3>
+            <p className="mb-3 sm:mb-4 text-xs sm:text-sm text-gray-600">Upload a photo of the collected waste to verify and earn your reward.</p>
             <div className="mb-4">
               <label htmlFor="verification-image" className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Image

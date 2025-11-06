@@ -36,10 +36,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-semibold mb-6 text-gray-800">Account Settings</h1>
+    <div className="p-4 sm:p-6 md:p-8 max-w-2xl mx-auto">
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-4 sm:mb-6 text-gray-800">Account Settings</h1>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
           <div className="relative">
@@ -49,9 +49,9 @@ export default function SettingsPage() {
               name="name"
               value={settings.name}
               onChange={handleInputChange}
-              className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              className="pl-9 sm:pl-10 w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
             />
-            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <User className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
           </div>
         </div>
 
@@ -64,9 +64,9 @@ export default function SettingsPage() {
               name="email"
               value={settings.email}
               onChange={handleInputChange}
-              className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              className="pl-9 sm:pl-10 w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
             />
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <Mail className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
           </div>
         </div>
 
@@ -79,9 +79,9 @@ export default function SettingsPage() {
               name="phone"
               value={settings.phone}
               onChange={handleInputChange}
-              className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              className="pl-9 sm:pl-10 w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
             />
-            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <Phone className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
           </div>
         </div>
 
@@ -94,9 +94,9 @@ export default function SettingsPage() {
               name="address"
               value={settings.address}
               onChange={handleInputChange}
-              className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              className="pl-9 sm:pl-10 w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
             />
-            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <MapPin className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
           </div>
         </div>
 
@@ -114,8 +114,8 @@ export default function SettingsPage() {
           </label>
         </div>
 
-        <Button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-white">
-          <Save className="w-4 h-4 mr-2" />
+        <Button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-white text-sm sm:text-base py-2.5 sm:py-3">
+          <Save className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
           Save Changes
         </Button>
       </form>

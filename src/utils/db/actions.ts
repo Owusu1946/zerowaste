@@ -318,19 +318,25 @@ export async function getAllRewards() {
   try {
     const rewards = await db
       .select({
-        id: Rewards.id,
         userId: Rewards.userId,
-        points: Rewards.points,
-        level: Rewards.level,
-        createdAt: Rewards.createdAt,
         userName: Users.name,
+        points: sql<number>`SUM(${Rewards.points})`.mapWith(Number),
+        level: sql<number>`MAX(${Rewards.level})`.mapWith(Number),
       })
       .from(Rewards)
       .leftJoin(Users, eq(Rewards.userId, Users.id))
-      .orderBy(desc(Rewards.points))
+      .groupBy(Rewards.userId, Users.name)
+      .orderBy(desc(sql`SUM(${Rewards.points})`))
       .execute();
 
-    return rewards;
+    return rewards.map((r, index) => ({
+      id: index + 1,
+      userId: r.userId,
+      userName: r.userName,
+      points: r.points,
+      level: r.level,
+      createdAt: new Date(),
+    }));
   } catch (error) {
     console.error("Error fetching all rewards:", error);
     return [];

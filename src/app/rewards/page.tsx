@@ -225,19 +225,19 @@ export default function RewardsPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-semibold mb-6 text-gray-800">Rewards</h1>
+    <div className="p-4 sm:p-6 md:p-8 max-w-4xl mx-auto">
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-4 sm:mb-6 text-gray-800">Rewards</h1>
       
-      <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between h-full border-l-4 border-green-500 mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-gray-800">Reward Balance</h2>
+      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg flex flex-col justify-between h-full border-l-4 border-green-500 mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-800">Reward Balance</h2>
         <div className="flex items-center justify-between mt-auto">
           <div className="flex items-center">
-            <Coins className="w-10 h-10 mr-3 text-green-500" />
+            <Coins className="w-8 h-8 sm:w-10 sm:h-10 mr-2 sm:mr-3 text-green-500 shrink-0" />
             <div>
-              <span className="text-4xl font-bold text-green-500">{balance}</span>
-              <p className="text-sm text-gray-500">Available Points</p>
+              <span className="text-3xl sm:text-4xl font-bold text-green-500">{balance}</span>
+              <p className="text-xs sm:text-sm text-gray-500">Available Points</p>
               {balance > 0 && (
-                <p className="text-xs text-gray-400 mt-1">≈ {calculateEthAmount(balance)} SepoliaETH</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-1">≈ {calculateEthAmount(balance)} SepoliaETH</p>
               )}
             </div>
           </div>
@@ -245,37 +245,37 @@ export default function RewardsPage() {
       </div>
 
       {/* Blockchain Redemption Section */}
-      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl shadow-lg mb-8 border border-purple-200">
-        <div className="flex items-center mb-4">
-          <Wallet className="w-6 h-6 mr-2 text-purple-600" />
-          <h2 className="text-xl font-semibold text-gray-800">Redeem to Blockchain</h2>
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 sm:p-6 rounded-xl shadow-lg mb-6 sm:mb-8 border border-purple-200">
+        <div className="flex items-center mb-3 sm:mb-4">
+          <Wallet className="w-5 h-5 sm:w-6 sm:h-6 mr-2 text-purple-600 shrink-0" />
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Redeem to Blockchain</h2>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
           Convert your points to Sepolia testnet ETH tokens. Enter your wallet address below.
         </p>
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           <input
             type="text"
             placeholder="Your Ethereum wallet address (0x...)" 
             value={walletAddress}
             onChange={(e) => setWalletAddress(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             disabled={redeeming || balance === 0}
           />
           <Button
             onClick={handleBlockchainRedemption}
             disabled={redeeming || balance === 0 || !walletAddress.trim()}
-            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold"
+            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold text-sm sm:text-base py-2.5 sm:py-3"
           >
             {redeeming ? (
               <>
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
-                Processing Transaction...
+                <Loader className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                <span className="text-xs sm:text-sm">Processing...</span>
               </>
             ) : (
               <>
-                <Wallet className="w-4 h-4 mr-2" />
-                Redeem {balance} Points ({calculateEthAmount(balance)} SepoliaETH)
+                <Wallet className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                <span className="text-xs sm:text-sm">Redeem {balance} Points ({calculateEthAmount(balance)} SepoliaETH)</span>
               </>
             )}
           </Button>
@@ -284,86 +284,86 @@ export default function RewardsPage() {
               href={getTransactionUrl(lastTxHash)}
               target="_blank" 
               rel="noopener noreferrer"
-              className="flex items-center justify-center text-sm text-purple-600 hover:text-purple-700"
+              className="flex items-center justify-center text-xs sm:text-sm text-purple-600 hover:text-purple-700"
             >
-              <ExternalLink className="w-4 h-4 mr-1" />
+              <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
               View Last Transaction
             </a>
           )}
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
         <div>
-          <h2 className="text-2xl font-semibold mb-4 text-gray-800">Recent Transactions</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4 text-gray-800">Recent Transactions</h2>
           <div className="bg-white rounded-xl shadow-md overflow-hidden">
             {transactions.length > 0 ? (
               transactions.map(transaction => (
-                <div key={transaction.id} className="flex items-center justify-between p-4 border-b border-gray-200 last:border-b-0">
-                  <div className="flex items-center">
+                <div key={transaction.id} className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 last:border-b-0">
+                  <div className="flex items-center min-w-0 flex-1">
                     {transaction.type === 'earned_report' ? (
-                      <ArrowUpRight className="w-5 h-5 text-green-500 mr-3" />
+                      <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 text-green-500 mr-2 sm:mr-3 shrink-0" />
                     ) : transaction.type === 'earned_collect' ? (
-                      <ArrowUpRight className="w-5 h-5 text-blue-500 mr-3" />
+                      <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 mr-2 sm:mr-3 shrink-0" />
                     ) : (
-                      <ArrowDownRight className="w-5 h-5 text-red-500 mr-3" />
+                      <ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 mr-2 sm:mr-3 shrink-0" />
                     )}
-                    <div>
-                      <p className="font-medium text-gray-800">{transaction.description}</p>
-                      <p className="text-sm text-gray-500">{transaction.date}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm sm:text-base text-gray-800 truncate">{transaction.description}</p>
+                      <p className="text-xs sm:text-sm text-gray-500">{transaction.date}</p>
                     </div>
                   </div>
-                  <span className={`font-semibold ${transaction.type.startsWith('earned') ? 'text-green-500' : 'text-red-500'}`}>
+                  <span className={`font-semibold text-sm sm:text-base shrink-0 ml-2 ${transaction.type.startsWith('earned') ? 'text-green-500' : 'text-red-500'}`}>
                     {transaction.type.startsWith('earned') ? '+' : '-'}{transaction.amount}
                   </span>
                 </div>
               ))
             ) : (
-              <div className="p-4 text-center text-gray-500">No transactions yet</div>
+              <div className="p-3 sm:p-4 text-center text-sm sm:text-base text-gray-500">No transactions yet</div>
             )}
           </div>
         </div>
 
         <div>
-          <h2 className="text-2xl font-semibold mb-4 text-gray-800">Available Rewards</h2>
-          <div className="space-y-4">
+          <h2 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4 text-gray-800">Available Rewards</h2>
+          <div className="space-y-3 sm:space-y-4">
             {rewards.length > 0 ? (
               rewards.map(reward => (
-                <div key={reward.id} className="bg-white p-4 rounded-xl shadow-md">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-lg font-semibold text-gray-800">{reward.name}</h3>
-                    <span className="text-green-500 font-semibold">{reward.cost} points</span>
+                <div key={reward.id} className="bg-white p-3 sm:p-4 rounded-xl shadow-md">
+                  <div className="flex justify-between items-center mb-2 gap-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 truncate">{reward.name}</h3>
+                    <span className="text-green-500 font-semibold text-sm sm:text-base shrink-0">{reward.cost} pts</span>
                   </div>
-                  <p className="text-gray-600 mb-2">{reward.description}</p>
-                  <p className="text-sm text-gray-500 mb-4">{reward.collectionInfo}</p>
+                  <p className="text-sm sm:text-base text-gray-600 mb-2">{reward.description}</p>
+                  <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">{reward.collectionInfo}</p>
                   {reward.id === 0 ? (
                     <div className="space-y-2">
                       <Button 
                         onClick={handleRedeemAllPoints}
-                        className="w-full bg-green-500 hover:bg-green-600 text-white"
+                        className="w-full bg-green-500 hover:bg-green-600 text-white text-sm sm:text-base py-2 sm:py-2.5"
                         disabled={balance === 0}
                       >
-                        <Gift className="w-4 h-4 mr-2" />
+                        <Gift className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                         Redeem All Points
                       </Button>
                     </div>
                   ) : (
                     <Button 
                       onClick={() => handleRedeemReward(reward.id)}
-                      className="w-full bg-green-500 hover:bg-green-600 text-white"
+                      className="w-full bg-green-500 hover:bg-green-600 text-white text-sm sm:text-base py-2 sm:py-2.5"
                       disabled={balance < reward.cost}
                     >
-                      <Gift className="w-4 h-4 mr-2" />
+                      <Gift className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                       Redeem Reward
                     </Button>
                   )}
                 </div>
               ))
             ) : (
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 sm:p-4 rounded-md">
                 <div className="flex items-center">
-                  <AlertCircle className="h-6 w-6 text-yellow-400 mr-3" />
-                  <p className="text-yellow-700">No rewards available at the moment.</p>
+                  <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400 mr-2 sm:mr-3 shrink-0" />
+                  <p className="text-yellow-700 text-sm sm:text-base">No rewards available at the moment.</p>
                 </div>
               </div>
             )}

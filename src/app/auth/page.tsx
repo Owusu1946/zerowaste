@@ -178,25 +178,25 @@ export default function AuthPage() {
       </div>
 
       {/* Right Side - Auth Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 md:p-8 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center mb-8">
-            <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-2xl mr-3">
-              <Leaf className="w-8 h-8 text-white" />
+          <div className="lg:hidden flex items-center justify-center mb-6 sm:mb-8">
+            <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-2 sm:p-3 rounded-2xl mr-2 sm:mr-3">
+              <Leaf className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Zero2Hero</h1>
-              <p className="text-gray-600 text-sm">ETHOnline24</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Zero2Hero</h1>
+              <p className="text-gray-600 text-xs sm:text-sm">ETHOnline24</p>
             </div>
           </div>
 
           {/* Welcome Text */}
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
               {isLogin ? 'Welcome Back!' : 'Create Account'}
             </h2>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600">
               {isLogin 
                 ? 'Sign in to continue your eco journey'
                 : 'Join the waste management revolution'
@@ -205,10 +205,10 @@ export default function AuthPage() {
           </div>
 
           {/* Tab Toggle */}
-          <div className="flex bg-gray-200 rounded-xl p-1 mb-8">
+          <div className="flex bg-gray-200 rounded-xl p-1 mb-6 sm:mb-8">
             <button
               onClick={() => setIsLogin(true)}
-              className={`flex-1 py-2.5 rounded-lg font-semibold transition-all ${
+              className={`flex-1 py-2 sm:py-2.5 rounded-lg font-semibold text-sm sm:text-base transition-all ${
                 isLogin
                   ? 'bg-white text-green-600 shadow-md'
                   : 'text-gray-600 hover:text-gray-800'
@@ -218,7 +218,7 @@ export default function AuthPage() {
             </button>
             <button
               onClick={() => setIsLogin(false)}
-              className={`flex-1 py-2.5 rounded-lg font-semibold transition-all ${
+              className={`flex-1 py-2 sm:py-2.5 rounded-lg font-semibold text-sm sm:text-base transition-all ${
                 !isLogin
                   ? 'bg-white text-green-600 shadow-md'
                   : 'text-gray-600 hover:text-gray-800'
@@ -229,7 +229,7 @@ export default function AuthPage() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             {/* Name Field (Sign Up Only) */}
             {!isLogin && (
               <div className="space-y-2">
